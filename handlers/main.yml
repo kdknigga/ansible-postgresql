@@ -2,6 +2,6 @@
 ---
 - name: Restart postgresql
   service:
-    name: postgresql
+    name: "{{ __postgresql_service_name }}"
     state: restarted
   when: __postgresql_is_booted | bool
