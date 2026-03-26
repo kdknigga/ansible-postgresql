@@ -53,6 +53,16 @@
     __vars_file: "{{ role_path }}/vars/{{ item }}"
   when: __vars_file is file
 
+- name: Load PGDG upstream package variables
+  include_vars: "{{ __pgdg_vars_file }}"
+  when:
+    - postgresql_use_upstream_packages | d(false) | bool
+    - __pgdg_vars_file is file
+  vars:
+    __pgdg_vars_file: >-
+      {{ role_path }}/vars/{{ ansible_facts['distribution'] ~ '_' ~
+      ansible_facts['distribution_major_version'] }}_pgdg.yml
+
 - name: Check postgresql.conf
   stat:
     path: "{{ __postgresql_main_conf_file }}"
