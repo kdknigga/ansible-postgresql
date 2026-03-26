@@ -31,7 +31,7 @@
       environment:
         PGPASSWORD: "{{ postgresql_password }}"
       command:
-        cmd: psql -U postgres -f "{{ __postgresql_sql_tempfile.path }}"
+        cmd: "{{ __postgresql_bin_dir }}/psql -U postgres -f \"{{ __postgresql_sql_tempfile.path }}\""
       register: __postgresql_output
       changed_when: false
   always:
