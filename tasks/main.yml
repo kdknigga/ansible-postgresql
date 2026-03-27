@@ -144,7 +144,7 @@
       replace:
         path: "{{ __postgresql_hba_conf_file }}"
         regexp: "(peer|ident)$"
-        replace: "md5"
+        replace: "{{ __postgresql_auth_method }}"
         backup: true
       notify: Restart postgresql
 
