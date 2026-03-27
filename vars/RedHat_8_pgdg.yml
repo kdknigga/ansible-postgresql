@@ -3,7 +3,8 @@
 # PGDG upstream package overrides for RHEL 8
 
 __postgresql_packages: >-
-  {{ ['postgresql' + postgresql_version + '-server'] }}
+  {{ ['postgresql' + postgresql_version + '-server',
+      'postgresql' + postgresql_version + '-contrib'] }}
 
 __postgresql_data_dir: "/var/lib/pgsql/{{ postgresql_version }}/data"
 
