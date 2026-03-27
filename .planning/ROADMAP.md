@@ -32,7 +32,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 Plans:
 - [x] 01-01-PLAN.md -- Extract hardcoded values into __postgresql_* variables with downstream defaults
-- [ ] 01-02-PLAN.md -- Add feature flag, create PGDG variable files, wire conditional loading
+- [x] 01-02-PLAN.md -- Add feature flag, create PGDG variable files, wire conditional loading
 
 ### Phase 2: Repo, Packages & Full Lifecycle
 **Goal**: Users can install and run upstream PostgreSQL from PGDG packages on RHEL 8/9/10 with full parity to the Red Hat package workflow -- repo setup, package installation, database initialization, service management, config files, SSL certificates, password management, and SQL execution all work end-to-end
@@ -44,12 +44,11 @@ Plans:
   3. Config file layering (postgresql.conf includes, pg_hba.conf, SSL certs) writes to the correct upstream data directory
   4. Password management (ALTER USER) and SQL file execution work using the upstream psql binary path
   5. SCRAM-SHA-256 is used as the default authentication method for upstream installs
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
-- [ ] 02-03: TBD
+- [x] 02-01-PLAN.md -- PGDG repo setup, AppStream disable, unused repo disable, contrib package
+- [ ] 02-02-PLAN.md -- SCRAM-SHA-256 auth method and lifecycle path verification
 
 ### Phase 3: Validation & Safety
 **Goal**: The role fails fast with clear errors on invalid configurations and the existing Red Hat package workflow has verified regression protection
@@ -72,6 +71,6 @@ Phases execute in numeric order: 1 -> 2 -> 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Abstraction & Variable Layer | 0/2 | Not started | - |
-| 2. Repo, Packages & Full Lifecycle | 0/3 | Not started | - |
+| 1. Abstraction & Variable Layer | 2/2 | Complete | 2026-03-26 |
+| 2. Repo, Packages & Full Lifecycle | 1/2 | In progress | - |
 | 3. Validation & Safety | 0/1 | Not started | - |
