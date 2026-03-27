@@ -10,12 +10,12 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Repository & Package Management
 
 - [x] **REPO-01**: Role accepts `postgresql_use_upstream_packages` boolean variable (default: false) that switches to upstream PGDG packages
-- [ ] **REPO-02**: Role installs PGDG repo RPM (`pgdg-redhat-repo-latest.noarch.rpm`) when upstream flag is set
-- [ ] **REPO-03**: Role disables AppStream postgresql module (`dnf module disable postgresql`) on RHEL 8/9 when upstream flag is set
-- [ ] **REPO-04**: Role installs upstream packages using PGDG naming convention (`postgresql{VER}-server`, `postgresql{VER}`) when upstream flag is set
-- [ ] **REPO-05**: Role installs contrib package (`postgresql{VER}-contrib`) when upstream flag is set
-- [ ] **REPO-06**: Role disables unused PGDG version repos to avoid confusion when upstream flag is set
-- [ ] **REPO-07**: Upstream packages work on RHEL 8, 9, 10 and derivatives (AlmaLinux, CentOS, Rocky)
+- [x] **REPO-02**: Role installs PGDG repo RPM (`pgdg-redhat-repo-latest.noarch.rpm`) when upstream flag is set
+- [x] **REPO-03**: Role disables AppStream postgresql module (`dnf module disable postgresql`) on RHEL 8/9 when upstream flag is set
+- [x] **REPO-04**: Role installs upstream packages using PGDG naming convention (`postgresql{VER}-server`, `postgresql{VER}`) when upstream flag is set
+- [x] **REPO-05**: Role installs contrib package (`postgresql{VER}-contrib`) when upstream flag is set
+- [x] **REPO-06**: Role disables unused PGDG version repos to avoid confusion when upstream flag is set
+- [x] **REPO-07**: Upstream packages work on RHEL 8, 9, 10 and derivatives (AlmaLinux, CentOS, Rocky)
 
 ### Path & Service Abstraction
 
@@ -75,12 +75,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | REPO-01 | Phase 1 | Complete |
-| REPO-02 | Phase 2 | Pending |
-| REPO-03 | Phase 2 | Pending |
-| REPO-04 | Phase 2 | Pending |
-| REPO-05 | Phase 2 | Pending |
-| REPO-06 | Phase 2 | Pending |
-| REPO-07 | Phase 2 | Pending |
+| REPO-02 | Phase 2 | Complete |
+| REPO-03 | Phase 2 | Complete |
+| REPO-04 | Phase 2 | Complete |
+| REPO-05 | Phase 2 | Complete |
+| REPO-06 | Phase 2 | Complete |
+| REPO-07 | Phase 2 | Complete |
 | PATH-01 | Phase 1 | Complete |
 | PATH-02 | Phase 1 | Complete |
 | PATH-03 | Phase 1 | Complete |
