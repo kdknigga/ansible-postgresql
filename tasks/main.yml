@@ -44,6 +44,10 @@
     - ansible_facts.packages["postgresql"][0].version |
       regex_search('([0-9]*).', '\\1') | first != postgresql_version | string
 
+- name: Set up PGDG upstream repository
+  include_tasks: upstream_repo.yml
+  when: postgresql_use_upstream_packages | d(false) | bool
+
 # rpm ostree pkg mgr cannot handle @groups/modules
 # so just assume the packages are present
 - name: Ensure required packages are installed
