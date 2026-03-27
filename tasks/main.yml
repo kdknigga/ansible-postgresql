@@ -88,7 +88,10 @@
     - __postgresql_is_booted | bool
     - __postgresql_has_setup_cmd | bool
   command:
-    cmd: "{{ __postgresql_setup_cmd_path }} --initdb"
+    cmd: >-
+      {{ __postgresql_setup_cmd_path }}
+      {{ (postgresql_use_upstream_packages | d(false) | bool) |
+         ternary('initdb', '--initdb') }}
     creates: "{{ __postgresql_main_conf_file }}"
 
 - name: Init DB on booted systems (without postgresql-setup)
@@ -118,7 +121,8 @@
               s/systemctl show -p \$nr_option.*service/echo NeedDaemonReload=no/' \
           {{ __postgresql_setup_cmd_path }} > $setup
       chmod a+rx $setup
-      $setup --initdb
+      $setup {{ (postgresql_use_upstream_packages | d(false) | bool) |
+                 ternary('initdb', '--initdb') }}
       rm $setup
     creates: "{{ __postgresql_main_conf_file }}"
 
