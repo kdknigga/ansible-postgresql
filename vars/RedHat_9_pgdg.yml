@@ -15,4 +15,6 @@ __postgresql_bin_dir: "/usr/pgsql-{{ postgresql_version }}/bin"
 __postgresql_setup_cmd_path: >-
   /usr/pgsql-{{ postgresql_version }}/bin/postgresql-{{ postgresql_version }}-setup
 
+__postgresql_auth_method: scram-sha-256
+
 __postgresql_versions_el9: ["16", "17", "18"]
