@@ -29,7 +29,11 @@
   loop: >-
     {{ __postgresql_pgdg_all_repos |
        difference([__postgresql_active_repo]) }}
+  register: __postgresql_disable_repo
   changed_when: false
+  failed_when:
+    - __postgresql_disable_repo.rc != 0
+    - "'No matching repo to modify' not in __postgresql_disable_repo.stderr"
   vars:
     __postgresql_pgdg_all_repos:
       - pgdg18
