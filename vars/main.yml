@@ -12,7 +12,11 @@ __postgresql_versions_el10: ["16", "18"]
 
 __postgresql_data_dir: /var/lib/pgsql/data
 __postgresql_has_setup_cmd: true
+__postgresql_service_name: postgresql
+__postgresql_bin_dir: /usr/bin
+__postgresql_setup_cmd_path: /usr/bin/postgresql-setup
 __postgresql_cert_directory: /etc/pki/tls
+__postgresql_auth_method: md5
 
 __postgresql_main_conf_file: "{{ __postgresql_data_dir }}/postgresql.conf"
 __postgresql_hba_conf_file: "{{ __postgresql_data_dir }}/pg_hba.conf"

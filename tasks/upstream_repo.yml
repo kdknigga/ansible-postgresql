@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: MIT
+---
+# Set up PGDG upstream repository for PostgreSQL packages
+
+- name: Install PGDG repository RPM
+  package:
+    name: >-
+      https://download.postgresql.org/pub/repos/yum/reporpms/EL-{{
+        ansible_facts['distribution_major_version'] }}-{{
+        ansible_facts['architecture'] }}/pgdg-redhat-repo-latest.noarch.rpm
+    state: present
+    disable_gpg_check: true
+
+- name: Disable AppStream postgresql module
+  command: dnf -qy module disable postgresql
+  register: __postgresql_module_disable
+  changed_when: "'Nothing to do' not in __postgresql_module_disable.stderr"
+  when: ansible_facts['distribution_major_version'] in ['8', '9']
+
+- name: Exclude postgresql packages from AppStream on RHEL 10
+  command: >-
+    dnf config-manager --save
+    --setopt=appstream.excludepkgs=postgresql*
+  changed_when: false
+  when: ansible_facts['distribution_major_version'] == '10'
+
+- name: Disable unused PGDG version repos
+  command: "dnf config-manager --disable {{ item }}"
+  loop: >-
+    {{ __postgresql_pgdg_all_repos |
+       difference([__postgresql_active_repo]) }}
+  changed_when: false
+  vars:
+    __postgresql_pgdg_all_repos:
+      - pgdg18
+      - pgdg17
+      - pgdg16
+      - pgdg15
+      - pgdg14
+      - pgdg13
+    __postgresql_active_repo: "pgdg{{ postgresql_version }}"
