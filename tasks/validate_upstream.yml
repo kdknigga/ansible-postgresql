@@ -1,0 +1,83 @@
+# SPDX-License-Identifier: MIT
+---
+# Upstream PGDG package validation guards
+# Uses collect-then-fail pattern: all errors gathered before failing
+
+- name: Initialize upstream validation errors
+  set_fact:
+    __postgresql_upstream_errors: []
+
+- name: Check platform is supported for upstream packages
+  set_fact:
+    __postgresql_upstream_errors: >-
+      {{ __postgresql_upstream_errors + [
+        "Upstream PGDG packages are only supported on RHEL 8/9/10
+        and derivatives (AlmaLinux, CentOS, Rocky). Detected: "
+        ~ ansible_facts['distribution'] ~ "."
+      ] }}
+  when: not __postgresql_is_rh_distro | bool
+
+- name: Check system is not OSTree or bootc
+  set_fact:
+    __postgresql_upstream_errors: >-
+      {{ __postgresql_upstream_errors + [
+        "Upstream PGDG packages are not supported on OSTree/bootc
+        systems. Use RHEL-shipped packages instead
+        (set postgresql_use_upstream_packages: false)."
+      ] }}
+  when: __postgresql_is_ostree | d(false) | bool
+
+- name: Check upstream version minimum
+  set_fact:
+    __postgresql_upstream_errors: >-
+      {{ __postgresql_upstream_errors + [
+        "Upstream PGDG packages require PostgreSQL 16 or higher.
+        Requested version: " ~ postgresql_version ~
+        ". Set postgresql_version to 16, 17, or 18."
+      ] }}
+  when: postgresql_version | int < 16
+
+- name: Detect conflicting RHEL postgresql packages
+  set_fact:
+    __postgresql_rhel_conflicts: >-
+      {{ ansible_facts.packages.keys() | list |
+         select('match', '^postgresql($|-)') | list }}
+
+- name: Check for conflicting RHEL postgresql packages
+  set_fact:
+    __postgresql_upstream_errors: >-
+      {{ __postgresql_upstream_errors + [
+        "Found RHEL postgresql packages "
+        ~ __postgresql_rhel_conflicts | string
+        ~ " that conflict with upstream PGDG packages.
+        Remove them first or set postgresql_use_upstream_packages: false."
+      ] }}
+  when: __postgresql_rhel_conflicts | length > 0
+
+- name: Detect cross-version PGDG packages
+  set_fact:
+    __postgresql_pgdg_conflicts: >-
+      {{ ansible_facts.packages.keys() | list |
+         select('match', '^postgresql[0-9]+') |
+         reject('match', '^postgresql' ~ postgresql_version ~ '($|-)') | list }}
+
+- name: Check for cross-version PGDG package conflicts
+  set_fact:
+    __postgresql_upstream_errors: >-
+      {{ __postgresql_upstream_errors + [
+        "Found PGDG packages from a different version: "
+        ~ __postgresql_pgdg_conflicts | string
+        ~ ". Only one PGDG major version can be active.
+        Remove the conflicting packages or change postgresql_version
+        to match the installed version."
+      ] }}
+  when: __postgresql_pgdg_conflicts | length > 0
+
+- name: Fail if any upstream validation errors
+  fail:
+    msg: |-
+      Upstream package validation failed with {{ __postgresql_upstream_errors | length }} error(s):
+      {% for err in __postgresql_upstream_errors %}
+      {{ loop.index }}. {{ err }}
+      {% endfor %}
+  when: __postgresql_upstream_errors | length > 0
