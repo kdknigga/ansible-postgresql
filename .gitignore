@@ -13,8 +13,3 @@ __pycache__/
 *~
 .pytest_cache/
 
-.serena/
-.planning/
-.claude/
-CLAUDE.md
-
