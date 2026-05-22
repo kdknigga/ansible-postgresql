@@ -39,6 +39,20 @@
     - ansible_facts['distribution_major_version'] == '10'
     - __postgresql_is_rh_distro | bool
 
+- name: Check postgis is not requested on PostgreSQL 13 (no PGDG packages available)
+  set_fact:
+    __postgresql_extension_errors: >-
+      {{ __postgresql_extension_errors + [
+        "postgis is not available for PostgreSQL 13 (no PGDG packages for PG 13 on EL). Use PostgreSQL 15 or later, or remove postgis."
+      ] }}
+  when:
+    - postgresql_extensions |
+      selectattr('name', 'equalto', 'postgis') |
+      rejectattr('state', 'equalto', 'absent') |
+      list | length > 0
+    - postgresql_version | string == '13'
+    - __postgresql_is_rh_distro | bool
+
 - name: Check all extension names are known
   set_fact:
     __postgresql_extension_errors: >-

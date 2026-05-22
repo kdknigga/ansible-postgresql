@@ -94,6 +94,38 @@
           include_tasks: tasks/clean_instance.yml
           tags: tests::cleanup
 
+    - name: Test extension validation - postgis on PostgreSQL 13
+      when:
+        - ansible_facts['distribution_major_version'] in ['8', '9']
+        - ansible_facts['distribution'] in ['AlmaLinux', 'CentOS', 'RedHat', 'Rocky']
+      block:
+        - name: Run postgresql role with postgis on PostgreSQL 13
+          include_tasks: tasks/run_role_with_clear_facts.yml
+          vars:
+            __sr_public: true
+            postgresql_use_upstream_packages: true
+            postgresql_version: "13"
+            postgresql_extensions:
+              - name: postgis
+
+        - name: Fail if role did not reject postgis on PostgreSQL 13
+          fail:
+            msg: >-
+              Expected failure for postgis on PostgreSQL 13
+              but role succeeded
+
+      rescue:
+        - name: Test - PG13 postgis error mentions postgis and PostgreSQL 13
+          assert:
+            that:
+              - "'postgis' in ansible_failed_result.msg"
+              - "'13' in ansible_failed_result.msg"
+
+      always:
+        - name: Clean up after postgis PG13 test
+          include_tasks: tasks/clean_instance.yml
+          tags: tests::cleanup
+
     - name: Test extension validation - unknown extension name
       block:
         - name: Run postgresql role with unknown extension name
