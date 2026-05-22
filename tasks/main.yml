@@ -52,14 +52,6 @@
   include_tasks: validate_extensions.yml
   when: postgresql_extensions | d([]) | length > 0
 
-- name: Configure extension repositories
-  include_tasks: repos_extensions.yml
-  when: postgresql_extensions | d([]) | length > 0
-
-- name: Install or remove extension packages
-  include_tasks: packages_extensions.yml
-  when: postgresql_extensions | d([]) | length > 0
-
 - name: Compute shared_preload_libraries list
   include_tasks: preload_extensions.yml
 
@@ -96,6 +88,15 @@
       (__postgresql_is_ostree | d(false)) |
       ternary(__postgresql_packages | reject('match', '^@'),
               __postgresql_packages) | list }}"
+
+- name: Configure extension repositories
+  include_tasks: repos_extensions.yml
+  when: postgresql_extensions | d([]) | length > 0
+
+- name: Install or remove extension packages
+  include_tasks: packages_extensions.yml
+  when: postgresql_extensions | d([]) | length > 0
+
 
 - name: Init DB on booted systems (with postgresql-setup)
   when:
