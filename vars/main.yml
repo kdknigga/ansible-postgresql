@@ -40,6 +40,41 @@ __postgresql_no_subset_facts: [memory_mb]
 __postgresql_required_facts_subsets: "{{ ['!all', '!min', 'hardware'] +
   __postgresql_required_facts | difference(__postgresql_no_subset_facts) }}"
 
+# Extension name to PGDG base package name prefix.
+# Resolution formula:
+#   - For most extensions: full_pkg = base ~ '_' ~ postgresql_version
+#     (e.g. postgis34 -> postgis34_16, pgvector -> pgvector_16)
+#   - For timescaledb: base ends with '-'; full_pkg = base ~ postgresql_version
+#     (e.g. timescaledb-2-postgresql- -> timescaledb-2-postgresql-16)
+# When user sets item.version, base is built as item.name ~ item.version
+# (e.g. name=postgis, version='33' -> base=postgis33 -> postgis33_16)
+__postgresql_extension_packages:
+  postgis: postgis34
+  pgvector: pgvector
+  timescaledb: "timescaledb-2-postgresql-"
+  pg_cron: pg_cron
+  pgaudit: pgaudit
+
+# Contrib-bundled extensions: these ship inside the postgresql{ver}-contrib
+# package (already installed by the upstream lifecycle) and have no
+# standalone PGDG package. The role accepts them as valid extension names
+# but skips the package install step (PKG-03). Preload behavior for these
+# is owned by Phase 6 (PRELOAD-01).
+__postgresql_contrib_only_extensions:
+  - pg_stat_statements
+  - auto_explain
+
+# Extensions that require a shared_preload_libraries entry to function.
+# auto_explain is included here even though it is contrib-bundled and
+# outside the PRELOAD-01 spec - omitting it would leave the variable
+# incomplete since auto_explain also requires preloading to activate (D-02).
+__postgresql_preload_required:
+  - timescaledb
+  - pg_stat_statements
+  - pg_cron
+  - pgaudit
+  - auto_explain
+
 # BEGIN - DO NOT EDIT THIS BLOCK - rh distros variables
 # Ansible distribution identifiers that the role treats like RHEL
 __postgresql_rh_distros:

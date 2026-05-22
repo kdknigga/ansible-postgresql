@@ -8,3 +8,6 @@ effective_cache_size = {{ (ansible_facts.memory_mb.real.total / 2) | int | abs }
 {% if postgresql_ssl_enable %}
 ssl = on
 {% endif %}
+{% if __postgresql_preload_libraries | d([]) %}
+shared_preload_libraries = '{{ __postgresql_preload_libraries | join(", ") }}'
+{% endif %}

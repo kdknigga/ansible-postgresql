@@ -48,6 +48,21 @@
   include_tasks: validate_upstream.yml
   when: postgresql_use_upstream_packages | d(false) | bool
 
+- name: Validate extension configuration
+  include_tasks: validate_extensions.yml
+  when: postgresql_extensions | d([]) | length > 0
+
+- name: Configure extension repositories
+  include_tasks: repos_extensions.yml
+  when: postgresql_extensions | d([]) | length > 0
+
+- name: Install or remove extension packages
+  include_tasks: packages_extensions.yml
+  when: postgresql_extensions | d([]) | length > 0
+
+- name: Compute shared_preload_libraries list
+  include_tasks: preload_extensions.yml
+
 - name: Check requested and installed PGDG version of Postgresql
   fail:
     msg: >-
@@ -219,6 +234,7 @@
     mode: "0600"
     owner: postgres
     group: postgres
+  notify: Restart postgresql
 
 - name: Generate postgresql system-roles.conf
   when: postgresql_server_conf is defined

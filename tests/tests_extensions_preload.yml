@@ -1,0 +1,332 @@
+# SPDX-License-Identifier: MIT
+---
+- name: Test preload library computation and rendering
+  hosts: all
+  tasks:
+    - name: Skip test on non-RHEL platforms
+      meta: end_host
+      when: ansible_facts['os_family'] != 'RedHat'
+
+    - name: Test PRELOAD-01a - pg_stat_statements (contrib-bundled) appears in shared_preload_libraries
+      block:
+        - name: Run postgresql role with pg_stat_statements (contrib-bundled, no state field)
+          include_tasks: tasks/run_role_with_clear_facts.yml
+          vars:
+            __sr_public: true
+            postgresql_use_upstream_packages: true
+            postgresql_version: "16"
+            postgresql_extensions:
+              - name: pg_stat_statements
+
+        - name: Slurp internal conf file
+          ansible.builtin.slurp:
+            src: "{{ __postgresql_internal_conf_file }}"
+          register: __internal_conf
+
+        - name: Assert pg_stat_statements appears in shared_preload_libraries
+          ansible.builtin.assert:
+            that:
+              - "'pg_stat_statements' in (__internal_conf.content | b64decode)"
+              - "'shared_preload_libraries' in (__internal_conf.content | b64decode)"
+            fail_msg: >-
+              PRELOAD-01a failed: pg_stat_statements not present in rendered
+              shared_preload_libraries line of internal conf
+
+      rescue:
+        - name: Fail with PRELOAD-01a context
+          ansible.builtin.fail:
+            msg: "PRELOAD-01a test failed: {{ ansible_failed_result.msg }}"
+
+      always:
+        - name: Clean up after PRELOAD-01a test
+          include_tasks: tasks/clean_instance.yml
+          tags: tests::cleanup
+
+    - name: Test PRELOAD-01b - pgaudit (installable, state present) appears in shared_preload_libraries
+      block:
+        - name: Run postgresql role with pgaudit state present
+          include_tasks: tasks/run_role_with_clear_facts.yml
+          vars:
+            __sr_public: true
+            postgresql_use_upstream_packages: true
+            postgresql_version: "16"
+            postgresql_extensions:
+              - name: pgaudit
+                state: present
+
+        - name: Slurp internal conf file
+          ansible.builtin.slurp:
+            src: "{{ __postgresql_internal_conf_file }}"
+          register: __internal_conf
+
+        - name: Assert pgaudit appears in shared_preload_libraries
+          ansible.builtin.assert:
+            that:
+              - "'pgaudit' in (__internal_conf.content | b64decode)"
+              - "'shared_preload_libraries' in (__internal_conf.content | b64decode)"
+            fail_msg: >-
+              PRELOAD-01b failed: pgaudit not present in rendered
+              shared_preload_libraries line of internal conf
+
+      rescue:
+        - name: Fail with PRELOAD-01b context
+          ansible.builtin.fail:
+            msg: "PRELOAD-01b test failed: {{ ansible_failed_result.msg }}"
+
+      always:
+        - name: Clean up after PRELOAD-01b test
+          include_tasks: tasks/clean_instance.yml
+          tags: tests::cleanup
+
+    - name: Test PRELOAD-01c - pgvector NOT in preload list does NOT appear in shared_preload_libraries
+      block:
+        - name: Run postgresql role with pgvector (not in preload-required list)
+          include_tasks: tasks/run_role_with_clear_facts.yml
+          vars:
+            __sr_public: true
+            postgresql_use_upstream_packages: true
+            postgresql_version: "16"
+            postgresql_extensions:
+              - name: pgvector
+
+        - name: Slurp internal conf file
+          ansible.builtin.slurp:
+            src: "{{ __postgresql_internal_conf_file }}"
+          register: __internal_conf
+
+        - name: Assert pgvector does not appear in shared_preload_libraries
+          ansible.builtin.assert:
+            that:
+              - "'pgvector' not in (__internal_conf.content | b64decode)"
+              - "'shared_preload_libraries' not in (__internal_conf.content | b64decode)"
+            fail_msg: >-
+              PRELOAD-01c failed: pgvector unexpectedly appears in
+              shared_preload_libraries — it is not in the auto-detect list
+              and has no shared_preload:true override
+
+      rescue:
+        - name: Fail with PRELOAD-01c context
+          ansible.builtin.fail:
+            msg: "PRELOAD-01c test failed: {{ ansible_failed_result.msg }}"
+
+      always:
+        - name: Clean up after PRELOAD-01c test
+          include_tasks: tasks/clean_instance.yml
+          tags: tests::cleanup
+
+    - name: Test PRELOAD-01d - empty extensions list omits shared_preload_libraries entirely
+      block:
+        - name: Run postgresql role with empty extensions list
+          include_tasks: tasks/run_role_with_clear_facts.yml
+          vars:
+            __sr_public: true
+            postgresql_use_upstream_packages: true
+            postgresql_version: "16"
+            postgresql_extensions: []
+
+        - name: Slurp internal conf file
+          ansible.builtin.slurp:
+            src: "{{ __postgresql_internal_conf_file }}"
+          register: __internal_conf
+
+        - name: Assert shared_preload_libraries line is absent when no extensions listed
+          ansible.builtin.assert:
+            that:
+              - "'shared_preload_libraries' not in (__internal_conf.content | b64decode)"
+            fail_msg: >-
+              PRELOAD-01d failed: shared_preload_libraries line found in rendered
+              conf when extensions list is empty — D-09 requires the line to be
+              omitted entirely (no shared_preload_libraries = '')
+
+      rescue:
+        - name: Fail with PRELOAD-01d context
+          ansible.builtin.fail:
+            msg: "PRELOAD-01d test failed: {{ ansible_failed_result.msg }}"
+
+      always:
+        - name: Clean up after PRELOAD-01d test
+          include_tasks: tasks/clean_instance.yml
+          tags: tests::cleanup
+
+    - name: Test PRELOAD-02 - shared_preload_libraries rendered via template (header fingerprint proves path)
+      block:
+        - name: Run postgresql role with pg_cron (preload-required)
+          include_tasks: tasks/run_role_with_clear_facts.yml
+          vars:
+            __sr_public: true
+            postgresql_use_upstream_packages: true
+            postgresql_version: "16"
+            postgresql_extensions:
+              - name: pg_cron
+
+        - name: Slurp internal conf file
+          ansible.builtin.slurp:
+            src: "{{ __postgresql_internal_conf_file }}"
+          register: __internal_conf
+
+        - name: Assert template rendered shared_preload_libraries with header fingerprint
+          ansible.builtin.assert:
+            that:
+              - "'shared_preload_libraries' in (__internal_conf.content | b64decode)"
+              - "'pg_cron' in (__internal_conf.content | b64decode)"
+              - "'system_role:postgresql' in (__internal_conf.content | b64decode)"
+            fail_msg: >-
+              PRELOAD-02 failed: rendered internal conf missing template
+              fingerprint OR shared_preload_libraries line — config not
+              rendered via template path
+
+      rescue:
+        - name: Fail with PRELOAD-02 context
+          ansible.builtin.fail:
+            msg: "PRELOAD-02 test failed: {{ ansible_failed_result.msg }}"
+
+      always:
+        - name: Clean up after PRELOAD-02 test
+          include_tasks: tasks/clean_instance.yml
+          tags: tests::cleanup
+
+    - name: Test PRELOAD-03a - shared_preload true force-adds extension not in known list
+      block:
+        - name: Run postgresql role with pgvector and shared_preload true override
+          include_tasks: tasks/run_role_with_clear_facts.yml
+          vars:
+            __sr_public: true
+            postgresql_use_upstream_packages: true
+            postgresql_version: "16"
+            postgresql_extensions:
+              - name: pgvector
+                shared_preload: true
+
+        - name: Slurp internal conf file
+          ansible.builtin.slurp:
+            src: "{{ __postgresql_internal_conf_file }}"
+          register: __internal_conf
+
+        - name: Assert pgvector appears in shared_preload_libraries due to force-add override
+          ansible.builtin.assert:
+            that:
+              - "'pgvector' in (__internal_conf.content | b64decode)"
+              - "'shared_preload_libraries' in (__internal_conf.content | b64decode)"
+            fail_msg: >-
+              PRELOAD-03a failed: shared_preload:true did not force-add
+              pgvector to shared_preload_libraries
+
+      rescue:
+        - name: Fail with PRELOAD-03a context
+          ansible.builtin.fail:
+            msg: "PRELOAD-03a test failed: {{ ansible_failed_result.msg }}"
+
+      always:
+        - name: Clean up after PRELOAD-03a test
+          include_tasks: tasks/clean_instance.yml
+          tags: tests::cleanup
+
+    - name: Test PRELOAD-03b - shared_preload false suppresses extension in known list
+      block:
+        - name: Run postgresql role with pgaudit and shared_preload false override
+          include_tasks: tasks/run_role_with_clear_facts.yml
+          vars:
+            __sr_public: true
+            postgresql_use_upstream_packages: true
+            postgresql_version: "16"
+            postgresql_extensions:
+              - name: pgaudit
+                shared_preload: false
+
+        - name: Slurp internal conf file
+          ansible.builtin.slurp:
+            src: "{{ __postgresql_internal_conf_file }}"
+          register: __internal_conf
+
+        - name: Assert pgaudit is suppressed from shared_preload_libraries by override
+          ansible.builtin.assert:
+            that:
+              - "'pgaudit' not in (__internal_conf.content | b64decode)"
+              - "'shared_preload_libraries' not in (__internal_conf.content | b64decode)"
+            fail_msg: >-
+              PRELOAD-03b failed: shared_preload:false did not suppress
+              pgaudit from shared_preload_libraries
+
+      rescue:
+        - name: Fail with PRELOAD-03b context
+          ansible.builtin.fail:
+            msg: "PRELOAD-03b test failed: {{ ansible_failed_result.msg }}"
+
+      always:
+        - name: Clean up after PRELOAD-03b test
+          include_tasks: tasks/clean_instance.yml
+          tags: tests::cleanup
+
+    - name: Test PRELOAD-01e - pgaudit state absent does NOT appear in shared_preload_libraries
+      block:
+        - name: Run postgresql role with pgaudit state absent (no shared_preload override)
+          include_tasks: tasks/run_role_with_clear_facts.yml
+          vars:
+            __sr_public: true
+            postgresql_use_upstream_packages: true
+            postgresql_version: "16"
+            postgresql_extensions:
+              - name: pgaudit
+                state: absent
+
+        - name: Slurp internal conf file
+          ansible.builtin.slurp:
+            src: "{{ __postgresql_internal_conf_file }}"
+          register: __internal_conf
+
+        - name: Assert pgaudit absent from shared_preload_libraries when state is absent
+          ansible.builtin.assert:
+            that:
+              - "'pgaudit' not in (__internal_conf.content | b64decode)"
+            fail_msg: >-
+              PRELOAD-01e failed: pgaudit appears in shared_preload_libraries
+              even though state is absent — Phase 1 should have excluded it
+              and no shared_preload override was set
+
+      rescue:
+        - name: Fail with PRELOAD-01e context
+          ansible.builtin.fail:
+            msg: "PRELOAD-01e test failed: {{ ansible_failed_result.msg }}"
+
+      always:
+        - name: Clean up after PRELOAD-01e test
+          include_tasks: tasks/clean_instance.yml
+          tags: tests::cleanup
+
+    - name: Test PRELOAD-03c - pgaudit state absent with shared_preload true does NOT appear (CR-01 regression guard)
+      block:
+        - name: Run postgresql role with pgaudit state absent and shared_preload true (CR-01 input)
+          include_tasks: tasks/run_role_with_clear_facts.yml
+          vars:
+            __sr_public: true
+            postgresql_use_upstream_packages: true
+            postgresql_version: "16"
+            postgresql_extensions:
+              - name: pgaudit
+                state: absent
+                shared_preload: true
+
+        - name: Slurp internal conf file
+          ansible.builtin.slurp:
+            src: "{{ __postgresql_internal_conf_file }}"
+          register: __internal_conf
+
+        - name: Assert pgaudit absent from shared_preload_libraries despite shared_preload true (CR-01 fix)
+          ansible.builtin.assert:
+            that:
+              - "'pgaudit' not in (__internal_conf.content | b64decode)"
+            fail_msg: >-
+              PRELOAD-03c failed: pgaudit appears in shared_preload_libraries
+              with state absent + shared_preload true — CR-01 regression.
+              Phase 2 union() must exclude state:absent entries so a removed
+              extension cannot be force-added back via shared_preload:true.
+
+      rescue:
+        - name: Fail with PRELOAD-03c context
+          ansible.builtin.fail:
+            msg: "PRELOAD-03c test failed: {{ ansible_failed_result.msg }}"
+
+      always:
+        - name: Clean up after PRELOAD-03c test
+          include_tasks: tasks/clean_instance.yml
+          tags: tests::cleanup

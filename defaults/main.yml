@@ -25,3 +25,23 @@ postgresql_ssl_enable: false
 postgresql_certificates: []
 
 postgresql_use_upstream_packages: false
+
+# List of PostgreSQL extensions to install via PGDG packages.
+# Requires postgresql_use_upstream_packages: true.
+# Each item is a dict with:
+#   name:           (required) Extension name. Supported: postgis, pgvector,
+#                   timescaledb, pg_cron, pgaudit.
+#   state:          (optional) 'present' (default) or 'absent'.
+#   version:        (optional) Package version prefix; e.g. version '33' -> postgis33_16.
+#                   Selects which release stream to install. Primarily used for PostGIS.
+#   shared_preload: (optional) Boolean override for shared_preload_libraries
+#                   management (Phase 6 feature, reserved for future use).
+# Example:
+# postgresql_extensions:
+#   - name: postgis
+#   - name: pgvector
+#     state: present
+#   - name: timescaledb
+#   - name: postgis
+#     version: '33'
+postgresql_extensions: []

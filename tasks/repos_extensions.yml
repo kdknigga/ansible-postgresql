@@ -1,0 +1,124 @@
+# SPDX-License-Identifier: MIT
+---
+# Configure OS repositories required by extensions:
+#   - REPO-08/REPO-09: TimescaleDB packagecloud.io repo (configure when
+#     timescaledb in extensions list, remove when absent)
+#   - REPO-10: EPEL and CRB enabled when PostGIS in extensions list
+#
+# EPEL/CRB cleanup policy (D-03): this file enables EPEL/CRB but never
+# removes them. EPEL/CRB are general-purpose repos that may serve other
+# software on the host; removing them when PostGIS is absent could break
+# unrelated packages. This is asymmetric with the TimescaleDB repo
+# (REPO-09) which IS removed when timescaledb is absent because the
+# TimescaleDB repo is single-purpose and narrowly scoped.
+#
+# ostree posture: tasks/validate_upstream.yml already rejects the
+# ostree+upstream-packages combination, and tasks/validate_extensions.yml
+# requires postgresql_use_upstream_packages: true. Therefore the public
+# role API cannot reach this file on rpm-ostree systems. The use: ternary
+# on every ansible.builtin.package call (matching the canonical pattern at
+# tasks/main.yml lines 80-81) and the ostree guards on dnf_config_manager
+# and subscription-manager are defense-in-depth for consistency with the
+# rest of the role and to protect against future validation reorderings.
+# dnf_config_manager and subscription-manager tasks each carry an
+# "ostree false" when-condition because neither subsystem reliably exists
+# on rpm-ostree systems.
+
+- name: Configure TimescaleDB packagecloud.io yum repository
+  ansible.builtin.yum_repository:
+    name: timescale_timescaledb
+    description: timescale_timescaledb
+    baseurl: >-
+      https://packagecloud.io/timescale/timescaledb/el/{{
+        ansible_facts['distribution_major_version'] }}/$basearch
+    repo_gpgcheck: 1
+    gpgcheck: 0
+    gpgkey: https://packagecloud.io/timescale/timescaledb/gpgkey
+    sslverify: 1
+    sslcacert: /etc/pki/tls/certs/ca-bundle.crt
+    enabled: 1
+    state: >-
+      {{ 'present' if postgresql_extensions | d([]) |
+         selectattr('name', 'equalto', 'timescaledb') |
+         rejectattr('state', 'equalto', 'absent') |
+         list | length > 0 else 'absent' }}
+
+- name: Enable EPEL and CRB for PostGIS dependencies (REPO-10)
+  # EPEL/CRB are enabled only when PostGIS is being installed (state: present
+  # or no state key). Items with state: absent are filtered out so a removal
+  # run does not unexpectedly enable EPEL on a host for the first time.
+  when:
+    - postgresql_extensions | d([]) |
+      selectattr('name', 'equalto', 'postgis') |
+      rejectattr('state', 'equalto', 'absent') |
+      list | length > 0
+    - __postgresql_is_rh_distro | bool
+  block:
+    # RHEL clones path (D-01): install epel-release via package manager.
+    # The use: ternary switches to the rpm-ostree package backend on
+    # rpm-ostree systems (matches tasks/main.yml lines 80-81 canonical pattern).
+    - name: Ensure EPEL repository is installed (RHEL clones)
+      ansible.builtin.package:
+        name: epel-release
+        state: present
+        use: "{{ (__postgresql_is_ostree | d(false)) |
+                 ternary('ansible.posix.rhel_rpm_ostree', omit) }}"
+      when: ansible_facts['distribution'] != 'RedHat'
+
+    # RHEL clones path (Claude's Discretion): use community.general
+    # dnf_config_manager to enable CRB. Module form is preferred over
+    # ansible.builtin.command to avoid lint command-instead-of-module.
+    # Module added in community.general 8.2.0 (lower bound bumped in this plan).
+    # ostree guard: dnf_config_manager requires dnf which is not
+    # present/active on rpm-ostree systems (cross-AI review MEDIUM).
+    - name: Ensure CRB repository is enabled (RHEL clones)
+      community.general.dnf_config_manager:
+        name: "{{ __postgresql_crb_repo_name }}"
+        state: enabled
+      when:
+        - ansible_facts['distribution'] != 'RedHat'
+        - not (__postgresql_is_ostree | d(false))
+      vars:
+        __crb_repo_by_major:
+          "8": powertools
+          "9": crb
+          "10": crb
+        __postgresql_crb_repo_name: >-
+          {{ __crb_repo_by_major[
+               ansible_facts['distribution_major_version']] |
+             d('crb') }}
+
+    # Actual RHEL path (D-02): subscription-manager enables CRB.
+    # Idempotent: subscription-manager always returns 0 even when the repo
+    # is already enabled, so changed_when is set to suppress false changes.
+    # ostree guard: subscription-manager does not run on rpm-ostree
+    # systems; rpm-ostree uses a different subscription paradigm
+    # (cross-AI review HIGH/MEDIUM consequence).
+    - name: Enable CodeReady Builder via subscription-manager (actual RHEL)
+      ansible.builtin.command:
+        cmd: >-
+          subscription-manager repos
+          --enable codeready-builder-for-rhel-{{
+            ansible_facts['distribution_major_version'] }}-{{
+            ansible_facts['architecture'] }}-rpms
+      changed_when: false
+      when:
+        - ansible_facts['distribution'] == 'RedHat'
+        - not (__postgresql_is_ostree | d(false))
+
+    # Actual RHEL path (D-02): EPEL installed from Fedora URL.
+    # GPG check is disabled for the bootstrap install because the EPEL
+    # GPG key is shipped by the epel-release package itself and is not
+    # present before first install. Subsequent EPEL installs use the key.
+    # The use: ternary switches to the rpm-ostree package backend on
+    # rpm-ostree systems (matches tasks/main.yml lines 80-81 canonical pattern).
+    - name: Install EPEL from Fedora project URL (actual RHEL)
+      ansible.builtin.package:
+        name: >-
+          https://dl.fedoraproject.org/pub/epel/epel-release-latest-{{
+            ansible_facts['distribution_major_version'] }}.noarch.rpm
+        state: present
+        disable_gpg_check: true
+        use: "{{ (__postgresql_is_ostree | d(false)) |
+                 ternary('ansible.posix.rhel_rpm_ostree', omit) }}"
+      when: ansible_facts['distribution'] == 'RedHat'

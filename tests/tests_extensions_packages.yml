@@ -1,0 +1,113 @@
+# SPDX-License-Identifier: MIT
+---
+- name: Test extension package lifecycle
+  hosts: all
+  tasks:
+    - name: Skip test on non-RHEL platforms
+      meta: end_host
+      when: ansible_facts['os_family'] != 'RedHat'
+
+    - name: Test PKG-01 - extension package installed when state present
+      block:
+        - name: Run postgresql role with pgvector state present
+          include_tasks: tasks/run_role_with_clear_facts.yml
+          vars:
+            __sr_public: true
+            postgresql_use_upstream_packages: true
+            postgresql_version: "16"
+            postgresql_extensions:
+              - name: pgvector
+                state: present
+
+        - name: Gather package facts after role run
+          package_facts:
+
+        - name: Assert pgvector_16 package is installed
+          assert:
+            that:
+              - "'pgvector_16' in ansible_facts.packages"
+            fail_msg: >-
+              PKG-01 failed: pgvector_16 package not found in
+              ansible_facts.packages after role run with state=present
+
+      rescue:
+        - name: Fail with PKG-01 context
+          fail:
+            msg: "PKG-01 test failed: {{ ansible_failed_result.msg }}"
+
+      always:
+        - name: Clean up after PKG-01 test
+          include_tasks: tasks/clean_instance.yml
+          tags: tests::cleanup
+
+    - name: Test PKG-02 - extension package removed when state absent
+      block:
+        - name: Pre-condition - install pgvector_16 before testing removal
+          ansible.builtin.package:
+            name: pgvector_16
+            state: present
+
+        - name: Run postgresql role with pgvector state absent
+          include_tasks: tasks/run_role_with_clear_facts.yml
+          vars:
+            __sr_public: true
+            postgresql_use_upstream_packages: true
+            postgresql_version: "16"
+            postgresql_extensions:
+              - name: pgvector
+                state: absent
+
+        - name: Gather package facts after role run
+          package_facts:
+
+        - name: Assert pgvector_16 package is not installed
+          assert:
+            that:
+              - "'pgvector_16' not in ansible_facts.packages"
+            fail_msg: >-
+              PKG-02 failed: pgvector_16 package still found in
+              ansible_facts.packages after role run with state=absent
+
+      rescue:
+        - name: Fail with PKG-02 context
+          fail:
+            msg: "PKG-02 test failed: {{ ansible_failed_result.msg }}"
+
+      always:
+        - name: Clean up after PKG-02 test
+          include_tasks: tasks/clean_instance.yml
+          tags: tests::cleanup
+
+    - name: Test PKG-03 - contrib-bundled extension accepted with no package install
+      block:
+        - name: Run postgresql role with pg_stat_statements (contrib-bundled)
+          include_tasks: tasks/run_role_with_clear_facts.yml
+          vars:
+            __sr_public: true
+            postgresql_use_upstream_packages: true
+            postgresql_version: "16"
+            postgresql_extensions:
+              - name: pg_stat_statements
+                state: present
+
+        - name: Gather package facts after role run
+          package_facts:
+
+        - name: Assert no standalone pg_stat_statements package was installed
+          assert:
+            that:
+              - "'pg_stat_statements' not in ansible_facts.packages"
+            fail_msg: >-
+              PKG-03 failed: unexpected standalone pg_stat_statements package
+              found — this extension ships inside postgresql16-contrib and
+              must not trigger a separate package install
+
+      rescue:
+        - name: Fail with PKG-03 context
+          fail:
+            msg: "PKG-03 test failed: {{ ansible_failed_result.msg }}"
+
+      always:
+        - name: Clean up after PKG-03 test
+          include_tasks: tasks/clean_instance.yml
+          tags: tests::cleanup
