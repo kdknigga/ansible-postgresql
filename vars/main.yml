@@ -40,16 +40,46 @@ __postgresql_no_subset_facts: [memory_mb]
 __postgresql_required_facts_subsets: "{{ ['!all', '!min', 'hardware'] +
   __postgresql_required_facts | difference(__postgresql_no_subset_facts) }}"
 
+# Default PostGIS package prefix per PostgreSQL major version.
+# PGDG ships a different PostGIS release stream for each PG version — the
+# available streams depend on which PostGIS versions have been built against
+# that PG release.  The mapping below tracks the recommended default
+# (newest stable stream available for each PG version):
+#
+#   PG 15: postgis32 through postgis36 available → default postgis35
+#   PG 16: postgis33 through postgis36 available → default postgis35
+#   PG 17: postgis33 through postgis36 available → default postgis35
+#   PG 18: postgis35 and postgis36 available     → default postgis35
+#
+# PG 13 has no PostGIS packages in PGDG at all; validate_extensions.yml
+# rejects that combination before reaching the install step.
+#
+# Users who need a specific PostGIS stream can pin it with item.version
+# (e.g. {name: postgis, version: '36'} → postgis36_{pg_ver}).
+__postgresql_postgis_default_by_pg_version:
+  "13": postgis35  # validate_extensions.yml blocks this; value is a safeguard
+  "15": postgis35
+  "16": postgis35
+  "17": postgis35
+  "18": postgis35
+
 # Extension name to PGDG base package name prefix.
 # Resolution formula:
 #   - For most extensions: full_pkg = base ~ '_' ~ postgresql_version
-#     (e.g. postgis34 -> postgis34_16, pgvector -> pgvector_16)
+#     (e.g. postgis35 -> postgis35_16, pgvector -> pgvector_16)
 #   - For timescaledb: base ends with '-'; full_pkg = base ~ postgresql_version
 #     (e.g. timescaledb-2-postgresql- -> timescaledb-2-postgresql-16)
 # When user sets item.version, base is built as item.name ~ item.version
 # (e.g. name=postgis, version='33' -> base=postgis33 -> postgis33_16)
+#
+# The postgis entry uses __postgresql_postgis_default_by_pg_version to select
+# the correct PostGIS stream for the requested PostgreSQL version.  This is
+# necessary because PostGIS 3.4 packages are not available for PostgreSQL 18
+# (PGDG only ships PostGIS 3.5+ for PG 18).
 __postgresql_extension_packages:
-  postgis: postgis34
+  postgis: >-
+    {{ __postgresql_postgis_default_by_pg_version[postgresql_version | string]
+       | d('postgis35') }}
   pgvector: pgvector
   timescaledb: "timescaledb-2-postgresql-"
   pg_cron: pg_cron
