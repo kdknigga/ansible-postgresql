@@ -1,0 +1,94 @@
+# SPDX-License-Identifier: MIT
+---
+# Extension validation guards
+# Uses collect-then-fail pattern: all errors gathered before failing
+
+- name: Initialize extension validation errors
+  set_fact:
+    __postgresql_extension_errors: []
+
+- name: Check all extensions have a name field
+  set_fact:
+    __postgresql_extension_errors: >-
+      {{ __postgresql_extension_errors + [
+        "Extension at index " ~ ansible_loop.index0 ~ " is missing the required 'name' field. Each item in postgresql_extensions must be a dict with at least a 'name' key."
+      ] }}
+  loop: "{{ postgresql_extensions }}"
+  loop_control:
+    label: "item[{{ ansible_loop.index0 }}]"
+    extended: true
+  when: item.name is not defined
+
+- name: Check upstream packages flag is set
+  set_fact:
+    __postgresql_extension_errors: >-
+      {{ __postgresql_extension_errors + [
+        "postgresql_extensions requires postgresql_use_upstream_packages: true. Set postgresql_use_upstream_packages: true or remove postgresql_extensions."
+      ] }}
+  when: not postgresql_use_upstream_packages | d(false) | bool
+
+- name: Check timescaledb is not requested on RHEL 10
+  set_fact:
+    __postgresql_extension_errors: >-
+      {{ __postgresql_extension_errors + [
+        "timescaledb is not available on RHEL 10 (no el/10 packages on packagecloud). Remove timescaledb from postgresql_extensions or use RHEL 9."
+      ] }}
+  when:
+    - postgresql_extensions |
+      selectattr('name', 'equalto', 'timescaledb') | list | length > 0
+    - ansible_facts['distribution_major_version'] == '10'
+    - __postgresql_is_rh_distro | bool
+
+- name: Check all extension names are known
+  set_fact:
+    __postgresql_extension_errors: >-
+      {{ __postgresql_extension_errors + [
+        "Unknown extension '" ~ item.name ~ "'. Supported extensions: "
+        ~ ((__postgresql_extension_packages.keys() | list) +
+           __postgresql_contrib_only_extensions) | join(', ') ~ "."
+      ] }}
+  loop: "{{ postgresql_extensions }}"
+  loop_control:
+    label: "{{ item.name | d('<no name>') }}"
+  when:
+    - item.name is defined
+    - item.name not in __postgresql_extension_packages
+    - item.name not in __postgresql_contrib_only_extensions
+
+- name: Check all extension state values are valid
+  set_fact:
+    __postgresql_extension_errors: >-
+      {{ __postgresql_extension_errors + [
+        "Extension '" ~ item.name ~ "' has invalid state '"
+        ~ item.state ~ "'. Allowed values: present, absent."
+      ] }}
+  loop: "{{ postgresql_extensions }}"
+  loop_control:
+    label: "{{ item.name | d('<no name>') }}"
+  when:
+    - item.name is defined
+    - item.state is defined
+    - item.state not in ['present', 'absent']
+
+- name: Check timescaledb does not use per-item version override
+  set_fact:
+    __postgresql_extension_errors: >-
+      {{ __postgresql_extension_errors + [
+        "timescaledb does not support the per-item 'version' override. Remove the 'version' key from the timescaledb entry."
+      ] }}
+  loop: "{{ postgresql_extensions }}"
+  loop_control:
+    label: "{{ item.name | d('<no name>') }}"
+  when:
+    - item.name is defined
+    - item.name == 'timescaledb'
+    - item.version is defined
+
+- name: Fail if any extension validation errors
+  fail:
+    msg: |-
+      Extension validation failed with {{ __postgresql_extension_errors | length }} error(s):
+      {% for err in __postgresql_extension_errors %}
+      {{ loop.index }}. {{ err }}
+      {% endfor %}
+  when: __postgresql_extension_errors | length > 0

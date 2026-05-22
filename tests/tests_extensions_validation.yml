@@ -1,0 +1,205 @@
+# SPDX-License-Identifier: MIT
+---
+- name: Test extension validation guards
+  hosts: all
+  tasks:
+    - name: Skip test on non-RHEL platforms
+      meta: end_host
+      when: ansible_facts['os_family'] != 'RedHat'
+
+    - name: Test extension validation - extension missing name field
+      block:
+        - name: Run postgresql role with nameless extension entry
+          include_tasks: tasks/run_role_with_clear_facts.yml
+          vars:
+            __sr_public: true
+            postgresql_use_upstream_packages: true
+            postgresql_version: "16"
+            postgresql_extensions:
+              - state: present   # name intentionally omitted
+
+        - name: Fail if role did not reject nameless extension
+          fail:
+            msg: >-
+              Expected failure for extension missing name field but role succeeded
+
+      rescue:
+        - name: Test - missing name error mentions index and required field
+          assert:
+            that:
+              - "'index 0' in ansible_failed_result.msg"
+              - "'name' in ansible_failed_result.msg"
+
+      always:
+        - name: Clean up after missing-name test
+          include_tasks: tasks/clean_instance.yml
+          tags: tests::cleanup
+
+    - name: Test extension validation - extensions set without upstream flag
+      block:
+        - name: Run postgresql role with extensions and upstream flag false
+          include_tasks: tasks/run_role_with_clear_facts.yml
+          vars:
+            __sr_public: true
+            postgresql_use_upstream_packages: false
+            postgresql_extensions:
+              - name: postgis
+
+        - name: Fail if role did not reject extensions without upstream flag
+          fail:
+            msg: >-
+              Expected failure for extensions without upstream flag
+              but role succeeded
+
+      rescue:
+        - name: Test - upstream flag error mentions postgresql_use_upstream_packages
+          assert:
+            that:
+              - "'postgresql_use_upstream_packages' in ansible_failed_result.msg"
+
+      always:
+        - name: Clean up after upstream-flag-required test
+          include_tasks: tasks/clean_instance.yml
+          tags: tests::cleanup
+
+    - name: Test extension validation - timescaledb on RHEL 10
+      when:
+        - ansible_facts['distribution_major_version'] == '10'
+        - ansible_facts['distribution'] in ['AlmaLinux', 'CentOS', 'RedHat', 'Rocky']
+      block:
+        - name: Run postgresql role with timescaledb on RHEL 10
+          include_tasks: tasks/run_role_with_clear_facts.yml
+          vars:
+            __sr_public: true
+            postgresql_use_upstream_packages: true
+            postgresql_version: "16"
+            postgresql_extensions:
+              - name: timescaledb
+
+        - name: Fail if role did not reject timescaledb on RHEL 10
+          fail:
+            msg: >-
+              Expected failure for timescaledb on RHEL 10
+              but role succeeded
+
+      rescue:
+        - name: Test - RHEL 10 error mentions timescaledb and RHEL 10
+          assert:
+            that:
+              - "'timescaledb' in ansible_failed_result.msg"
+              - "'RHEL 10' in ansible_failed_result.msg"
+
+      always:
+        - name: Clean up after timescaledb RHEL 10 test
+          include_tasks: tasks/clean_instance.yml
+          tags: tests::cleanup
+
+    - name: Test extension validation - unknown extension name
+      block:
+        - name: Run postgresql role with unknown extension name
+          include_tasks: tasks/run_role_with_clear_facts.yml
+          vars:
+            __sr_public: true
+            postgresql_use_upstream_packages: true
+            postgresql_version: "16"
+            postgresql_extensions:
+              - name: this_extension_does_not_exist
+
+        - name: Fail if role did not reject unknown extension
+          fail:
+            msg: >-
+              Expected failure for unknown extension name
+              but role succeeded
+
+      rescue:
+        - name: Test - unknown extension error mentions the bad name and supported list
+          assert:
+            that:
+              - "'this_extension_does_not_exist' in ansible_failed_result.msg"
+              - "'Unknown extension' in ansible_failed_result.msg"
+              - "'postgis' in ansible_failed_result.msg"
+
+      always:
+        - name: Clean up after unknown extension test
+          include_tasks: tasks/clean_instance.yml
+          tags: tests::cleanup
+
+    - name: Test extension validation - invalid state value
+      block:
+        - name: Run postgresql role with invalid extension state
+          include_tasks: tasks/run_role_with_clear_facts.yml
+          vars:
+            __sr_public: true
+            postgresql_use_upstream_packages: true
+            postgresql_version: "16"
+            postgresql_extensions:
+              - name: pgvector
+                state: broken
+
+        - name: Fail if role did not reject invalid state
+          fail:
+            msg: >-
+              Expected failure for invalid state value but role succeeded
+
+      rescue:
+        - name: Test - invalid state error mentions state value and allowed values
+          assert:
+            that:
+              - "'broken' in ansible_failed_result.msg"
+              - "'Allowed values' in ansible_failed_result.msg"
+
+      always:
+        - name: Clean up after invalid state test
+          include_tasks: tasks/clean_instance.yml
+          tags: tests::cleanup
+
+    - name: Test extension validation - timescaledb with version override
+      block:
+        - name: Run postgresql role with timescaledb version override
+          include_tasks: tasks/run_role_with_clear_facts.yml
+          vars:
+            __sr_public: true
+            postgresql_use_upstream_packages: true
+            postgresql_version: "16"
+            postgresql_extensions:
+              - name: timescaledb
+                version: "2"
+
+        - name: Fail if role did not reject timescaledb version override
+          fail:
+            msg: >-
+              Expected failure for timescaledb version override but role succeeded
+
+      rescue:
+        - name: Test - timescaledb version override error mentions the restriction
+          assert:
+            that:
+              - "'timescaledb' in ansible_failed_result.msg"
+              - "'version' in ansible_failed_result.msg"
+
+      always:
+        - name: Clean up after timescaledb version override test
+          include_tasks: tasks/clean_instance.yml
+          tags: tests::cleanup
+
+    - name: Test extension validation - empty list is accepted
+      block:
+        - name: Run postgresql role with empty extensions list
+          include_tasks: tasks/run_role_with_clear_facts.yml
+          vars:
+            __sr_public: true
+            postgresql_extensions: []
+
+      rescue:
+        - name: Unexpected failure during empty extensions test
+          fail:
+            msg: >-
+              Role failed with postgresql_extensions: [] (validation was not the cause
+              — it is skipped for empty lists). Failing task:
+              {{ ansible_failed_task.name | d('unknown') }}.
+              Error: {{ ansible_failed_result.msg | d('no message') }}
+
+      always:
+        - name: Clean up after empty list test
+          include_tasks: tasks/clean_instance.yml
+          tags: tests::cleanup

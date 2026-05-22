@@ -1,0 +1,74 @@
+# SPDX-License-Identifier: MIT
+---
+# Compute __postgresql_preload_libraries from postgresql_extensions.
+# Three-step selection (D-05):
+#   1. Intersect: extensions with name defined and (state undefined or
+#      state == 'present') whose name appears in
+#      __postgresql_preload_required (vars/main.yml).
+#   2. Force-add: union with any extension carrying shared_preload: true,
+#      EXCLUDING entries with state: absent (CR-01 fix — mirrors Phase 1's
+#      state-exclusion so a removed extension cannot be force-added back).
+#   3. Suppress: difference with any extension carrying shared_preload: false.
+# The set_fact is ALWAYS run (no when guard at include or task level, per
+# D-08). When postgresql_extensions is undefined or empty, the result is [].
+# The template's {% if __postgresql_preload_libraries | d([]) %} guard
+# ensures no shared_preload_libraries line is rendered for the empty case
+# (D-09 — PostgreSQL falls back to its built-in default).
+#
+# Phase-label comments (D-05 three-phase map, maintainability — addresses
+# cross-AI review MEDIUM concern):
+#   {# Phase 1: base list from known-list intersection #}
+#   {# Phase 2: force-add via shared_preload: true #}
+#   {# Phase 3: suppress via shared_preload: false #}
+# These strings label each sub-expression in the set_fact below.
+#
+# No notify here: the Restart postgresql handler is wired to the
+# template task in tasks/main.yml (Generate postgresql
+# system-roles-internal.conf), not to this set_fact.
+
+- name: Compute shared_preload_libraries extension list
+  set_fact:
+    __postgresql_preload_libraries: >-
+      {{
+        (
+          (
+            (postgresql_extensions | d([]))
+            | rejectattr('state', 'defined')
+            | selectattr('name', 'defined')
+            | map(attribute='name') | list
+          ) + (
+            (postgresql_extensions | d([]))
+            | selectattr('state', 'defined')
+            | selectattr('state', 'equalto', 'present')
+            | selectattr('name', 'defined')
+            | map(attribute='name') | list
+          )
+        )
+        | intersect(__postgresql_preload_required)
+        | union(
+            (
+              (postgresql_extensions | d([]))
+              | selectattr('name', 'defined')
+              | selectattr('shared_preload', 'defined')
+              | selectattr('shared_preload', 'equalto', true)
+              | rejectattr('state', 'defined')
+              | map(attribute='name') | list
+            ) + (
+              (postgresql_extensions | d([]))
+              | selectattr('name', 'defined')
+              | selectattr('shared_preload', 'defined')
+              | selectattr('shared_preload', 'equalto', true)
+              | selectattr('state', 'defined')
+              | rejectattr('state', 'equalto', 'absent')
+              | map(attribute='name') | list
+            )
+          )
+        | difference(
+            (postgresql_extensions | d([]))
+            | selectattr('name', 'defined')
+            | selectattr('shared_preload', 'defined')
+            | selectattr('shared_preload', 'equalto', false)
+            | map(attribute='name') | list
+          )
+        | unique | list
+      }}

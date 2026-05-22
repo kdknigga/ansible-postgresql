@@ -1,0 +1,126 @@
+# SPDX-License-Identifier: MIT
+---
+- name: Test extension repository configuration
+  hosts: all
+  tasks:
+    - name: Skip test on non-RHEL platforms
+      meta: end_host
+      when: ansible_facts['os_family'] != 'RedHat'
+
+    - name: Test REPO-08 - TimescaleDB repo configured when timescaledb in extensions list
+      when:
+        - ansible_facts['distribution_major_version'] != '10'
+      block:
+        - name: Run postgresql role with timescaledb in extensions list
+          include_tasks: tasks/run_role_with_clear_facts.yml
+          vars:
+            __sr_public: true
+            postgresql_use_upstream_packages: true
+            postgresql_version: "16"
+            postgresql_extensions:
+              - name: timescaledb
+
+        - name: Stat TimescaleDB repo file
+          ansible.builtin.stat:
+            path: /etc/yum.repos.d/timescale_timescaledb.repo
+          register: __repo_stat
+
+        - name: Test - TimescaleDB repo file exists after timescaledb in extensions
+          assert:
+            that:
+              - __repo_stat.stat.exists
+
+        - name: Slurp TimescaleDB repo file for content verification
+          ansible.builtin.slurp:
+            src: /etc/yum.repos.d/timescale_timescaledb.repo
+          register: __slurp
+
+        - name: Test - TimescaleDB repo file contains repo_gpgcheck=1 and gpgcheck=0
+          assert:
+            that:
+              - "'repo_gpgcheck=1' in (__slurp.content | b64decode)"
+              - "'gpgcheck=0' in (__slurp.content | b64decode)"
+
+      rescue:
+        - name: Fail with REPO-08 test failure message
+          fail:
+            msg: "REPO-08 test failed: {{ ansible_failed_result.msg }}"
+
+      always:
+        - name: Clean up after REPO-08 test
+          include_tasks: tasks/clean_instance.yml
+          tags: tests::cleanup
+
+    - name: Test REPO-09 - TimescaleDB repo absent when timescaledb not in extensions list
+      block:
+        - name: Run postgresql role with pgvector in extensions list (no timescaledb)
+          include_tasks: tasks/run_role_with_clear_facts.yml
+          vars:
+            __sr_public: true
+            postgresql_use_upstream_packages: true
+            postgresql_version: "16"
+            postgresql_extensions:
+              - name: pgvector
+
+        - name: Stat TimescaleDB repo file
+          ansible.builtin.stat:
+            path: /etc/yum.repos.d/timescale_timescaledb.repo
+          register: __repo_stat
+
+        - name: Test - TimescaleDB repo file does not exist when timescaledb absent
+          assert:
+            that:
+              - not __repo_stat.stat.exists
+
+      rescue:
+        - name: Fail with REPO-09 test failure message
+          fail:
+            msg: "REPO-09 test failed: {{ ansible_failed_result.msg }}"
+
+      always:
+        - name: Clean up after REPO-09 test
+          include_tasks: tasks/clean_instance.yml
+          tags: tests::cleanup
+
+    - name: Test REPO-10 - EPEL and CRB enabled when postgis in extensions list
+      block:
+        - name: Run postgresql role with postgis in extensions list
+          include_tasks: tasks/run_role_with_clear_facts.yml
+          vars:
+            __sr_public: true
+            postgresql_use_upstream_packages: true
+            postgresql_version: "16"
+            postgresql_extensions:
+              - name: postgis
+
+        - name: Gather package facts after role run
+          package_facts:
+
+        - name: Test - epel-release package is installed after postgis in extensions
+          assert:
+            that:
+              - "'epel-release' in ansible_facts.packages"
+
+        - name: Check enabled repos for CRB
+          ansible.builtin.command:
+            cmd: dnf repolist enabled
+          register: __repolist
+          changed_when: false
+
+        - name: Test - CRB repo is enabled after postgis in extensions
+          assert:
+            that:
+              - >-
+                ('crb' in __repolist.stdout) or
+                ('powertools' in __repolist.stdout) or
+                ('codeready' in __repolist.stdout)
+
+      rescue:
+        - name: Fail with REPO-10 test failure message
+          fail:
+            msg: "REPO-10 test failed: {{ ansible_failed_result.msg }}"
+
+      always:
+        - name: Clean up after REPO-10 test
+          include_tasks: tasks/clean_instance.yml
+          tags: tests::cleanup

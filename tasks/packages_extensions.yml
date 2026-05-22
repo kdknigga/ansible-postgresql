@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: MIT
+---
+# Install or remove extension OS packages based on postgresql_extensions
+# state field (PKG-01: install when state=present; PKG-02: remove when
+# state=absent). PKG-03: contrib-bundled extensions
+# (__postgresql_contrib_only_extensions) and any name without a dict
+# entry are skipped — no package install attempted.
+#
+# Package name construction (D-04): the dict value is the base; if base
+# ends with '-' (timescaledb), the postgresql_version is concatenated
+# directly; otherwise '_' is inserted between base and version.
+# Examples:
+#   pgvector                  -> pgvector_16
+#   postgis34                 -> postgis34_16
+#   timescaledb-2-postgresql- -> timescaledb-2-postgresql-16
+#
+# Per-item override: when the operator sets item.version, base is built
+# as item.name ~ item.version (e.g. {name: postgis, version: '33'}
+# produces postgis33_16) instead of using the dict default.
+#
+# Loader (D-05): timescaledb-2-loader-postgresql-{ver} is an RPM
+# dependency of the main timescaledb package and is pulled in
+# automatically by dnf. No separate install task here.
+#
+# ostree posture: the `use:` ternary matches the canonical pattern at
+# tasks/main.yml lines 80-81. tasks/validate_upstream.yml already
+# rejects the ostree+upstream-packages combination, and
+# tasks/validate_extensions.yml requires postgresql_use_upstream_packages:
+# true. Therefore the public role API cannot reach this file on
+# rpm-ostree systems. The `use:` parameter is defense-in-depth for
+# consistency with the rest of the role and to protect against future
+# validation reorderings.
+
+- name: Ensure extension OS packages are in desired state
+  ansible.builtin.package:
+    name: "{{ __postgresql_ext_pkg_name }}"
+    state: "{{ item.state | d('present') }}"
+    use: "{{ (__postgresql_is_ostree | d(false)) |
+             ternary('ansible.posix.rhel_rpm_ostree', omit) }}"
+  loop: "{{ postgresql_extensions | d([]) }}"
+  loop_control:
+    label: "{{ item.name | d('<no name>') }}"
+  when:
+    - item.name is defined
+    - item.name in __postgresql_extension_packages
+    - item.name not in __postgresql_contrib_only_extensions
+  vars:
+    __postgresql_ext_base: >-
+      {{ (item.name ~ item.version)
+         if item.version is defined
+         else __postgresql_extension_packages[item.name] }}
+    __postgresql_ext_sep: >-
+      {{ '' if (__postgresql_ext_base | trim | regex_search('-$'))
+         else '_' }}
+    __postgresql_ext_pkg_name: >-
+      {{ __postgresql_ext_base | trim ~
+         __postgresql_ext_sep | trim ~
+         postgresql_version }}
