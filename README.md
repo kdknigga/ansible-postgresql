@@ -164,7 +164,7 @@ including running an SQL script (the functionality of the
 
 ### Config file redefinition
 
-Configuration files generated from `postgresql_pg_hba_conf` and `postgresql_conf`
+Configuration files generated from `postgresql_pg_hba_conf` and `postgresql_server_conf`
 are regenerated within each single run. Therefore, every change rewrites the
 previous configuration.
 
@@ -211,3 +211,8 @@ See README-ostree.md for more information.
 ## License
 
 MIT
+
+## Contributing
+
+See [contributing.md](contributing.md) for guidelines on how to contribute to
+this role, including how to run tests locally and how to submit pull requests.
